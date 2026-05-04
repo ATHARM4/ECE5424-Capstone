@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.model_selection import train_test_split
-from .models import train_logistic_regression
+from .models import train_logistic_regression, train_random_forest, train_xgboost
 
 
 DEMOGRAPHIC_COLS = ["RIDAGEYR", "RIAGENDR", "RIDRETH1", "DMDEDUC2", "DMDMARTL",]
@@ -51,6 +51,7 @@ def run_baselines(features_path: Path, targets_path: Path, out_csv: Path) -> pd.
 
     y = df["hypertension"]
     results = []
+    model_fns = [("logistic_regression", train_logistic_regression), ("random_forest", train_random_forest), ("xgboost", train_xgboost)]
 
     feature_sets = [("demographic_only", DEMOGRAPHIC_COLS), ("lifestyle_only", LIFESTYLE_COLS), ("combined", DEMOGRAPHIC_COLS + LIFESTYLE_COLS),]
 
@@ -59,13 +60,14 @@ def run_baselines(features_path: Path, targets_path: Path, out_csv: Path) -> pd.
         X = df[present]
         num_cols, cat_cols = _split_columns(present)
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=25, stratify=y)
 
-        model = train_logistic_regression(X_train, y_train, num_cols, cat_cols)
-        metrics = _evaluate(model, X_test, y_test)
-        metrics.update({"feature_set": name, "n_features": len(present)})
-        results.append(metrics)
-        print(f"[{name}] AUC={metrics['roc_auc']:.3f}  F1={metrics['f1']:.3f}  Acc={metrics['accuracy']:.3f}")
+        for model_name, model_fn in model_fns:
+            model = model_fn(X_train, y_train, num_cols, cat_cols)
+            metrics = _evaluate(model, X_test, y_test)
+            metrics.update({"model": model_name, "feature_set": name, "n_features": len(present)})
+            results.append(metrics)
+            print(f"[{model_name}][{name}] AUC={metrics['roc_auc']:.3f}  F1={metrics['f1']:.3f}  Acc={metrics['accuracy']:.3f}")
 
     results_df = pd.DataFrame(results)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
